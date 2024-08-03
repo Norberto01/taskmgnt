@@ -1,0 +1,108 @@
+version: '3'
+services:
+  backend:
+    image: tskm:1.0.2
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - ./backend/src:/code
+    ports:
+      - "8004:8000"
+    env_file:
+      - .env
+    deploy:
+      mode: replicated
+      replicas: 2
+      resources:
+        limits:
+          cpus: '0.5' 
+          memory: 512M
+        reservations:
+          cpus: '0.25' # Reserve 0.5 core
+          memory: 256M
+      update_config:
+          parallelism: 1
+          failure_action: rollback
+          delay: 10s
+      restart_policy:
+          condition: any
+          delay: 5s
+          max_attempts: 5
+          window: 120s
+    depends_on:
+      - pgservice
+    networks:
+        - tasknet
+
+  pgservice:
+    image: postgres
+    ports:
+      - "5437:5432"
+    env_file:
+      - .env
+    volumes:
+     - pgservice-data-tskm:/var/lib/postgresql/data
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          cpus: '0.25' # Set CPU limit to 0.5 core
+          memory: 512M  # Set memory limit to 2GB
+        reservations:
+          cpus: '0.25'  # Reserve 0.5 core
+          memory: 512M # Reserve 1GB memory
+      restart_policy:
+        condition: any
+    networks:
+        - tasknet
+  
+  frontend:
+    image: tskm-react:1.0.5
+    volumes:
+      - ./frontend/src:/app
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: '0.25' # Set CPU limit to 0.5 core
+          memory: 512M  # Set memory limit to 2GB
+        reservations:
+          cpus: '0.25'  # Reserve 0.5 core
+          memory: 512M # Reserve 1GB memory
+      restart_policy:
+        condition: any
+    ports:
+      - "3005:80"
+    depends_on:
+      - backend
+    networks:
+      - tasknet
+  
+  nginx:
+    image: nginx:alpine
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          cpus: '0.25' # Set CPU limit to 0.5 core
+          memory: 512M  # Set memory limit to 2GB
+        reservations:
+          cpus: '0.25'  # Reserve 0.5 core
+          memory: 512M # Reserve 1GB memory
+      restart_policy:
+        condition: any
+    ports:
+      - "3001:80"
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - tasknet
+volumes:
+  pgservice-data-tskm:
+
+networks:
+    tasknet:
+      driver: overlay
+      attachable: true
